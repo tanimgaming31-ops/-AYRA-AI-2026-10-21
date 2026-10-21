@@ -176,7 +176,8 @@ public class MainActivity extends Activity {
             contents.put(new JSONObject().put("role",role).put("parts",parts));
         }
         body.put("contents",contents);
-        HttpURLConnection c=(HttpURLConnection)new URL("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent").openConnection();
+        for(int attempt=0; attempt<4; attempt++){
+            HttpURLConnection c=(HttpURLConnection)new URL("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent").openConnection();
         try{
             c.setRequestMethod("POST");c.setConnectTimeout(18000);c.setReadTimeout(60000);
             c.setRequestProperty("x-goog-api-key",key);c.setRequestProperty("Content-Type","application/json; charset=utf-8");c.setDoOutput(true);
@@ -186,6 +187,12 @@ public class MainActivity extends Activity {
             ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] tmp=new byte[4096];int n;
             try(InputStream in=stream){while((n=in.read(tmp))!=-1){if(out.size()>3_000_000)throw new IOException("Gemini response too large");out.write(tmp,0,n);}}
             String response=out.toString("UTF-8");
+            if(status==503 && attempt<3){
+                try{ Thread.sleep(1000L * (1L << attempt) + (long)(Math.random()*400)); }
+                catch(InterruptedException ie){ Thread.currentThread().interrupt(); throw new IOException("Gemini retry interrupted",ie); }
+                continue;
+            }
+            if(status==503)throw new IOException("Gemini is temporarily overloaded (HTTP 503) after 4 attempts. Try later or switch Gemini model.");
             if(status<200||status>=300)throw new IOException("Gemini HTTP "+status+": "+response.substring(0,Math.min(350,response.length())));
             JSONObject obj=new JSONObject(response);JSONArray choices=obj.optJSONArray("candidates");
             if(choices==null||choices.length()==0)throw new IOException("Gemini returned no reply (possibly blocked). "+response.substring(0,Math.min(150,response.length())));
@@ -193,6 +200,8 @@ public class MainActivity extends Activity {
             for(int i=0;i<parts.length();i++)if(parts.getJSONObject(i).has("text"))text.append(parts.getJSONObject(i).optString("text"));
             if(text.length()==0)throw new IOException("Gemini returned an empty response");return text.toString();
         }finally{c.disconnect();}
+        }
+        throw new IOException("Gemini retries exhausted");
     }
     private String jarvis(String root,String model,String key,JSONObject payload) throws Exception {
         if(model.trim().isEmpty())throw new IOException("Set the model name configured in OpenJarvis");
