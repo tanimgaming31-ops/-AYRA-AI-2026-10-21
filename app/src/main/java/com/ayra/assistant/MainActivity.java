@@ -56,7 +56,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
-    private static final int REQ_MIC=401, REQ_CAMERA_PERMISSION=402, REQ_NOTIFY=403;
+    private static final int REQ_MIC=401, REQ_CAMERA_PERMISSION=402, REQ_NOTIFY=403, REQ_LIVE_MIC=404;
     private static final int REQ_IMAGE=101, REQ_CAMERA=102, REQ_CONTACT=103, REQ_TEXT=104, REQ_PDF=105, REQ_BACKUP=106;
     private WebView web;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -68,6 +68,8 @@ public class MainActivity extends Activity {
     private String queuedAction=null, queuedPayload="";
     private Uri capturedImage=null;
     private String pendingBackup="";
+    private AyraLiveSession liveSession;
+    private String pendingLiveKey="", pendingLiveMemory="";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -128,6 +130,12 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void sendToGemini(String key,String model,String raw,String req){
             new Thread(()->{try{jsAI(req,true,gemini(key,model,new JSONObject(raw)));}catch(Exception e){jsAI(req,false,friendly(e));}},"GeminiNetwork").start();
         }
+        @JavascriptInterface public void startLive(String key,String memory){
+            main.post(()->startLiveVoice(key,memory));
+        }
+        @JavascriptInterface public void stopLive(){
+            main.post(()->stopLiveVoice());
+        }
         @JavascriptInterface public void sendToJarvis(String url,String model,String key,String raw,String req){
             new Thread(()->{try{jsAI(req,true,jarvis(url,model,key,new JSONObject(raw)));}catch(Exception e){jsAI(req,false,friendly(e));}},"OpenJarvisNetwork").start();
         }
@@ -138,6 +146,33 @@ public class MainActivity extends Activity {
             new Thread(()->{try{String u=apiRoot(root)+"/health";String r=request("GET",u,null,key);jsAI(req,true,r.length()>200?r.substring(0,200):r);}catch(Exception e){jsAI(req,false,friendly(e));}},"JarvisTest").start();
         }
         @JavascriptInterface public void exportBackup(String json){main.post(()->{pendingBackup=json;Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("application/json");i.putExtra(Intent.EXTRA_TITLE,"ayra-backup.json");startActivityForResult(i,REQ_BACKUP);});}
+    }
+    private void startLiveVoice(String key,String memory){
+        if(key==null || key.trim().isEmpty()){
+            js("onLiveError","Enter a Gemini API key in Settings first.");return;
+        }
+        if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
+            pendingLiveKey=key;pendingLiveMemory=memory;
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_LIVE_MIC);
+            return;
+        }
+        stopListening();
+        if(tts!=null)tts.stop();
+        stopLiveVoice();
+        String instruction="You are AYRA, a warm, expressive, multilingual female voice companion. "
+                +"Reply naturally in the language spoken by the user, including Bangla, English, Hindi, "
+                +"Indonesian, Tagalog, Arabic and Urdu. Be concise, friendly and grounded. "
+                +"Never claim to have performed a phone action without confirmation. "
+                +"User preferences: "+(memory==null?"":memory.substring(0,Math.min(3000,memory.length())));
+        liveSession=new AyraLiveSession(new AyraLiveSession.Events(){
+            @Override public void state(String value){js("onLiveState",value);}
+            @Override public void transcription(String who,String message){js("onLiveTranscription",who,message);}
+            @Override public void error(String message){js("onLiveError",message);}
+        });
+        liveSession.start(key,instruction);
+    }
+    private void stopLiveVoice(){
+        if(liveSession!=null){liveSession.stop();liveSession=null;}
     }
     private String friendly(Exception e){return e.getMessage()!=null?e.getMessage():e.getClass().getSimpleName();}
     private String apiRoot(String input) throws Exception {
@@ -165,6 +200,7 @@ public class MainActivity extends Activity {
     }
     private String gemini(String key,String model,JSONObject payload) throws Exception {
         if(key.isEmpty())throw new IOException("Gemini API key missing");
+        if(model.equals("gemini-3.8-live"))throw new IOException("Gemini 3.8 Live requires the Live Voice button, not the text API.");
         if(!model.matches("[a-zA-Z0-9._-]{3,100}"))throw new IOException("Invalid Gemini model name");
         String sys=payload.optString("system");JSONArray input=payload.optJSONArray("messages");if(input==null)throw new IOException("No input messages");
         JSONObject body=new JSONObject();body.put("systemInstruction",new JSONObject().put("parts",new JSONArray().put(new JSONObject().put("text",sys))));
@@ -218,7 +254,7 @@ public class MainActivity extends Activity {
         switch(a){
             case "startListening":mic(p);break;
             case "stopListening":stopListening();break;
-            case "stopAudio":stopListening();if(tts!=null)tts.stop();js("onTtsEnd");break;
+            case "stopAudio":stopLiveVoice();stopListening();if(tts!=null)tts.stop();js("onTtsEnd");break;
             case "speak":speak(p);break;
             case "youtube":openPackage("com.google.android.youtube","https://www.youtube.com");break;
             case "whatsapp":openPackage("com.whatsapp","https://www.whatsapp.com");break;
@@ -249,11 +285,17 @@ public class MainActivity extends Activity {
     @Override public void onRequestPermissionsResult(int code,String[] perms,int[] grants){
         super.onRequestPermissionsResult(code,perms,grants);
         boolean allowed=grants.length>0&&grants[0]==PackageManager.PERMISSION_GRANTED;
-        if(code==REQ_MIC){if(allowed)startMic(queuedPayload);else js("onSpeechError","Microphone permission denied. Enable it in Android Settings.");}
+        if(code==REQ_LIVE_MIC){
+            String key=pendingLiveKey,memory=pendingLiveMemory;
+            pendingLiveKey="";pendingLiveMemory="";
+            if(allowed)startLiveVoice(key,memory);
+            else js("onLiveError","Microphone permission denied. Enable it in Android Settings.");
+        }
+        else if(code==REQ_MIC){if(allowed)startMic(queuedPayload);else js("onSpeechError","Microphone permission denied. Enable it in Android Settings.");}
         else if(code==REQ_CAMERA_PERMISSION||code==REQ_NOTIFY){if(allowed)runPermissionAction(queuedAction,queuedPayload);else result("permissions","Permission denied; action not performed.");}
         queuedAction=null;queuedPayload="";
     }
-    private void mic(String lang){if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){queuedPayload=lang;requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_MIC);return;}startMic(lang);}
+    private void mic(String lang){stopLiveVoice();if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){queuedPayload=lang;requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_MIC);return;}startMic(lang);}
     private void startMic(String lang){
         if(!SpeechRecognizer.isRecognitionAvailable(this)){js("onSpeechError","No Android speech recognition service found. Install/enable speech recognition.");return;}
         if(tts!=null)tts.stop();stopListening();
@@ -315,5 +357,6 @@ public class MainActivity extends Activity {
         js("onImageSelected",b64,"image/jpeg");
     }catch(Exception e){result("info","Image error: "+friendly(e));}},"ImagePrepare").start();}
     @Override public void onBackPressed(){if(web!=null&&web.canGoBack())web.goBack();else super.onBackPressed();}
-    @Override protected void onDestroy(){stopListening();if(tts!=null){tts.stop();tts.shutdown();}if(torchOn){try{((CameraManager)getSystemService(CAMERA_SERVICE)).setTorchMode(torchId,false);}catch(Exception ignored){}}if(web!=null){web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onStop(){stopLiveVoice();super.onStop();}
+    @Override protected void onDestroy(){stopLiveVoice();stopListening();if(tts!=null){tts.stop();tts.shutdown();}if(torchOn){try{((CameraManager)getSystemService(CAMERA_SERVICE)).setTorchMode(torchId,false);}catch(Exception ignored){}}if(web!=null){web.destroy();web=null;}super.onDestroy();}
 }
