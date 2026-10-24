@@ -69,6 +69,7 @@ public class MainActivity extends Activity {
     private Uri capturedImage=null;
     private String pendingBackup="";
     private AyraLiveSession liveSession;
+    private AyraAgentController agent;
     private String pendingLiveKey="", pendingLiveMemory="";
 
     @Override public void onCreate(Bundle state) {
@@ -77,6 +78,7 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(0xFF060405);
         getWindow().getDecorView().setSystemUiVisibility(0);
         createNotificationChannel();
+        agent = new AyraAgentController(this);
         web = new WebView(this);
         web.setBackgroundColor(0xFF070407);
         WebSettings ws=web.getSettings();
@@ -144,6 +146,26 @@ public class MainActivity extends Activity {
         }
         @JavascriptInterface public void testJarvis(String root,String key,String req){
             new Thread(()->{try{String u=apiRoot(root)+"/health";String r=request("GET",u,null,key);jsAI(req,true,r.length()>200?r.substring(0,200):r);}catch(Exception e){jsAI(req,false,friendly(e));}},"JarvisTest").start();
+        }
+        @JavascriptInterface public String agentAddNote(String note){ return agent.saveMemory(note); }
+        @JavascriptInterface public String agentDeleteNote(String id){ return agent.removeMemory(id); }
+        @JavascriptInterface public String agentListNotes(){ return agent.listMemories(); }
+        @JavascriptInterface public String agentRelevantNotes(String query){ return agent.relevantMemories(query); }
+        @JavascriptInterface public String agentPlanTask(String text){ return agent.planTask(text); }
+        @JavascriptInterface public String agentListTasks(){ return agent.listTasks(); }
+        @JavascriptInterface public String agentRunTask(String id){
+            String outcome = agent.requestDispatch(id);
+            try {
+                JSONObject data = new JSONObject(outcome);
+                if (data.optBoolean("ok")) {
+                    String action = data.getString("action");
+                    String payload = data.optString("payload");
+                    main.post(() -> perform(action, payload));
+                }
+            } catch (Exception ignored) {
+                // Error details were already included in the JSON result.
+            }
+            return outcome;
         }
         @JavascriptInterface public void exportBackup(String json){main.post(()->{pendingBackup=json;Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("application/json");i.putExtra(Intent.EXTRA_TITLE,"ayra-backup.json");startActivityForResult(i,REQ_BACKUP);});}
     }
