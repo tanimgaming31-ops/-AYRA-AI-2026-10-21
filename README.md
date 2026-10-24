@@ -1,5 +1,14 @@
 # AYRA AI — Android Companion + Optional OpenJarvis API
 
+## Feature branch: local Agent + Smart Memory 2.0 (Android preview)
+
+On `feature/openjarvis-agent` the APK produced by **Build AYRA Android APK** is labelled **AYRA Agent Preview** with Android application ID `com.ayra.assistant.agentpreview`. It can be installed alongside your existing AYRA app without overwriting its private app data. The preview's local data starts separately; do not uninstall your original AYRA app.
+
+Added: SQLite private notes, keyword retrieval, opt-in inclusion of matching notes in AI prompts, explicit-approval allowlisted Android command planner, persistent task request history, notes in JSON export and Java unit tests. This is not the full Stanford OpenJarvis runtime. There is no backup import/restore yet.
+
+See [Phase 1–2 implementation and testing](docs/OPENJARVIS_AGENT_PHASE2.md) for exact actions, safety limits, build and testing checklist.
+
+
 An original dark-gold Android companion UI inspired by the supplied reference image, with an original **static AI avatar illustration** (not a live rigged 3D model).
 
 This is **not** the OpenJarvis project bundled into an APK. It is a new Android client with an optional integration with a separately running [OpenJarvis](https://github.com/open-jarvis/OpenJarvis) OpenAI-compatible API. OpenJarvis remains owned by its authors.
