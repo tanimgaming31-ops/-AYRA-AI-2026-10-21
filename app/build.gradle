@@ -9,6 +9,13 @@ android {
         versionCode 2
         versionName '1.1.0'
     }
+    buildTypes {
+        debug {
+            // Separate package: never overwrite an existing AYRA installation during testing.
+            applicationIdSuffix '.agentpreview'
+            versionNameSuffix '-agent-preview'
+        }
+    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
