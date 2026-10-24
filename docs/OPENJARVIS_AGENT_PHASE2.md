@@ -9,6 +9,7 @@ Baseline main commit when branch was created: `b11ea36e5fd65ea71a75fec10c54163db
 - No changes to any Maya repository or files.
 - All feature development commits are on this feature branch, **not main**.
 - Existing AYRA chat, custom Memory textarea, settings and API keys remain in their original WebView localStorage keys; none were migrated, renamed, reset or deleted.
+- **Safety preview:** The feature branch's debug build has application ID `com.ayra.assistant.agentpreview` and label `AYRA Agent Preview`. It installs **beside** the older AYRA application instead of overwriting it. The preview starts with separate, empty app-private storage; it does **not** automatically import the older app's key/chats/memory. Never uninstall your original app to test this feature branch. If a future release should upgrade the original package in place, keep its original application ID and *original signing certificate*; the test APK is not such an upgrade.
 - New notes and planned task history are stored in separate private Android SQLite database `ayra_agent_v1.db` version 1. Ordinary app updates retain it; uninstalling/removing app data removes it.
 - Existing Export backup action now also includes `agentNotes` and `agentTaskHistory` when running in the APK. There is **no restore/import flow yet**. Protect exported JSON: it contains private memories and chat history.
 - The new checkbox "Include matching SQLite notes in AI chat prompts" defaults **off**. Turning it on can send matching note text to Gemini or to the configured OpenJarvis server. It does not change how the older Memory textarea is used.
@@ -26,7 +27,7 @@ Baseline main commit when branch was created: `b11ea36e5fd65ea71a75fec10c54163db
 ### How to use on Android
 
 - GitHub → AYRA repository → Actions → **Build AYRA Android APK** → choose `feature/openjarvis-agent` and Run workflow if needed.
-- After successful run, download `AYRA-AI-debug-APK` artifact, unzip and install `app-debug.apk` on your Android phone.
+- After successful run, download `AYRA-AI-debug-APK` artifact, unzip and install `app-debug.apk` as a **separate AYRA Agent Preview app** on your Android phone. Keep original AYRA installed. Enter an API key in preview separately if needed.
 - **Settings → Smart Memory 2.0** → Save note → Show saved notes or Search.
 - **Tools → Agent Planner** → type `open youtube` / `turn on flashlight` / `check battery` / `set alarm for 7:05`; tap **Plan action**, inspect, then **Run approved action**. Android might request its own permission or confirmation.
 - **Tools → Agent Planner → Refresh history** shows planned, unsupported and requested tasks.
@@ -43,7 +44,7 @@ Static inspection and local smoke tests can be run before CI, but APK functional
 
 - JVM: `gradle :app:testDebugUnitTest` (requires Android toolchain and Gradle).
 - APK: `gradle :app:assembleDebug`.
-- Verify old saved chat and Memory remain after installing update.
+- Verify the original AYRA app is still installed with its old chat and Memory intact; the preview has separate storage.
 - Save a note, force-close and restart, then confirm it is still present.
 - Search matching keywords and verify unrelated notes are excluded.
 - Check the memory opt-in is off by default.
